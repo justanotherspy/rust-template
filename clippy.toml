@@ -1,0 +1,5 @@
+# The panic lints in Cargo.toml are denied everywhere except unit tests.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

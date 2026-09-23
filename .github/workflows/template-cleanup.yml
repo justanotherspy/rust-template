@@ -1,0 +1,227 @@
+name: Template Cleanup
+
+# One-shot workflow that initializes a repository generated from
+# justanotherspy/rust-template. It renames the crate, binary, library and
+# env-var prefix to match the new repository, points CODEOWNERS at the new
+# owner, strips the template-only doc blocks, and opens a pull request with
+# the result. It never runs on the template itself (the job `if` below), and
+# it no-ops once the repository has been initialized.
+#
+# Why a pull request instead of a push to main:
+#
+#   * GitHub refuses any push from an Actions token that creates, updates or
+#     deletes a file under `.github/workflows/`, and `workflows` is not a
+#     permission `GITHUB_TOKEN` can be granted. So the rewrite skips that
+#     directory, and nothing under it names the template (except the guards
+#     that compare against it, which is what they are for).
+#   * A pull request works on a protected default branch, and gives you a
+#     diff to review before the rename lands.
+#
+# Because this workflow cannot delete itself, the pull request asks you to
+# delete it by hand. Until you do, it stays a cheap no-op.
+#
+# Optional: set a `TEMPLATE_CLEANUP_TOKEN` secret to a PAT with `repo` +
+# `workflow` scope before generating the repository. When present it is used
+# instead of `GITHUB_TOKEN`, this workflow deletes itself in the pull request,
+# and the pull request's CI runs (GitHub does not run workflows for pull
+# requests opened by `GITHUB_TOKEN`).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    if: github.repository != 'justanotherspy/rust-template'
+    name: Initialize from template
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # This one-shot job pushes the rewritten tree back on a branch, so the
+      # checkout keeps its credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TEMPLATE_CLEANUP_TOKEN || secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+
+      # Idempotence guard: once Cargo.toml no longer names the template, the
+      # repository has been initialized and every step below is skipped.
+      - name: Check whether initialization is needed
+        id: check
+        env:
+          TEMPLATE_FULL: justanotherspy/rust-template
+          REPO_FULL: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! grep -q "$TEMPLATE_FULL" Cargo.toml; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "Already initialized from the template; nothing to do."
+              echo "You can delete .github/workflows/template-cleanup.yml."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # A crate name is ASCII letters, digits, `-` and `_`, and does not
+          # start with a digit. Fail loudly rather than write a broken crate.
+          REPO_NAME="${REPO_FULL#*/}"
+          if ! printf '%s' "$REPO_NAME" | grep -Eq '^[A-Za-z][A-Za-z0-9_-]*$'; then
+            echo "::error::'$REPO_NAME' is not a valid crate name; rename the repository or initialize by hand (README § Using this template)"
+            exit 1
+          fi
+          echo "needed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite template placeholders
+        if: steps.check.outputs.needed == 'true'
+        env:
+          REPO_FULL: ${{ github.repository }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          HAS_PAT: ${{ secrets.TEMPLATE_CLEANUP_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          REPO_NAME="${REPO_FULL#*/}"
+          TEMPLATE_FULL="justanotherspy/rust-template"
+          TEMPLATE_NAME="rust-template"
+
+          # Text files containing <pattern>, minus .git and target/, minus
+          # everything under .github/workflows/ (see the header).
+          matching() {
+            grep -rlI --exclude-dir=.git --exclude-dir=target "$1" . \
+              | grep -v '^\./\.github/workflows/' || true
+          }
+
+          # Replace <from> with <to> in every file that mentions it.
+          rewrite() {
+            local files
+            files="$(matching "$1")"
+            if [ -n "$files" ]; then
+              printf '%s\n' "$files" | xargs -r sed -i "s#${1}#${2}#g"
+            fi
+          }
+
+          # snake_case (the library name Rust derives from the crate name)
+          # and UPPER_SNAKE (the env-var prefix) of a name.
+          snake() { printf '%s' "$1" | tr '-' '_'; }
+          upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_'; }
+
+          # 1. The full repository path (URLs, the release guard in docs).
+          rewrite "$TEMPLATE_FULL" "$REPO_FULL"
+
+          # 2. The crate and binary name, then the library name and the
+          #    env-var prefix, most specific first.
+          if [ "$REPO_NAME" != "$TEMPLATE_NAME" ]; then
+            rewrite "$TEMPLATE_NAME" "$REPO_NAME"
+            rewrite "$(snake "$TEMPLATE_NAME")" "$(snake "$REPO_NAME")"
+            rewrite "$(upper "$TEMPLATE_NAME")" "$(upper "$REPO_NAME")"
+          fi
+
+          # 3. CODEOWNERS follows the new owner.
+          if [ -f .github/CODEOWNERS ]; then
+            sed -i "s#@justanotherspy#@${REPO_OWNER}#g" .github/CODEOWNERS
+          fi
+
+          # 4. Strip the template-only doc blocks, then squeeze the blank
+          #    lines the deletion leaves behind.
+          marked="$(matching '<!-- TEMPLATE:START -->')"
+          if [ -n "$marked" ]; then
+            printf '%s\n' "$marked" | while read -r f; do
+              sed -i '/<!-- TEMPLATE:START -->/,/<!-- TEMPLATE:END -->/d' "$f"
+              # A separate pass: `N` in the squeeze would swallow a marker line
+              # that follows a blank one, and the range above would never open.
+              sed -i '/^$/{N;/^\n$/D}' "$f"
+            done
+          fi
+
+          # 5. The rename left Cargo.lock's package entry out of order; let
+          #    cargo re-sort it (workspace only: no dependency moves). This
+          #    also proves the renamed manifest parses.
+          cargo update --workspace
+
+          # 6. Remove this one-shot workflow; only a PAT with the `workflow`
+          #    scope may.
+          if [ "$HAS_PAT" = "true" ]; then
+            git rm -f .github/workflows/template-cleanup.yml
+          fi
+
+      - name: Open initialization pull request
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.TEMPLATE_CLEANUP_TOKEN || secrets.GITHUB_TOKEN }}
+          HAS_PAT: ${{ secrets.TEMPLATE_CLEANUP_TOKEN != '' }}
+          REPO_FULL: ${{ github.repository }}
+          BASE: ${{ github.event.repository.default_branch }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/initialize-from-template"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore: initialize project from rust-template"
+          # The branch is owned by this workflow; force lets a re-run replace
+          # the branch an earlier failed attempt left behind.
+          git push --force origin "HEAD:refs/heads/${BRANCH}"
+
+          COMPARE_URL="${SERVER_URL}/${REPO_FULL}/compare/${BASE}...${BRANCH}?expand=1"
+
+          {
+            echo "Review and merge this pull request to finish initializing the"
+            echo "repository from the template. It renames the crate, binary,"
+            echo "library and env-var prefix to match \`${REPO_FULL}\` and strips"
+            echo "the template-only documentation."
+            echo
+            echo "Before merging, set \`description\` in \`Cargo.toml\` (it becomes"
+            echo "the Homebrew cask's description) and work through the"
+            echo "*After generating* checklist in the template's README."
+            if [ "$HAS_PAT" != "true" ]; then
+              echo
+              echo "Two things this workflow could not do, because \`GITHUB_TOKEN\`"
+              echo "may not touch files under \`.github/workflows/\`:"
+              echo
+              echo "1. **Delete \`.github/workflows/template-cleanup.yml\`** in this"
+              echo "   pull request (or right after merging). Left in place it is"
+              echo "   harmless: it sees the repository is initialized and exits."
+              echo "2. **Run CI on this pull request.** GitHub does not run"
+              echo "   workflows for pull requests opened by \`GITHUB_TOKEN\`;"
+              echo "   pushing any commit (the deletion above) triggers them."
+            fi
+          } > "${RUNNER_TEMP}/pr-body.md"
+
+          if PR_URL="$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null)"; then
+            echo "Updated existing pull request: ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if PR_URL="$(gh pr create \
+            --base "$BASE" \
+            --head "$BRANCH" \
+            --title "chore: initialize project from rust-template" \
+            --body-file "${RUNNER_TEMP}/pr-body.md")"; then
+            echo "Opened pull request: ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Most likely: "Allow GitHub Actions to create and approve pull
+            # requests" is off. The branch is pushed either way.
+            echo "::warning::Could not open the pull request automatically. Open it from ${COMPARE_URL}"
+            {
+              echo "### Initialization branch pushed"
+              echo
+              echo "Could not open the pull request automatically; most likely"
+              echo "\"Allow GitHub Actions to create and approve pull requests\""
+              echo "is disabled. Open it here:"
+              echo
+              echo "${COMPARE_URL}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
