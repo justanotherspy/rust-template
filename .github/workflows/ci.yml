@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Nightly moves under a green tree: a weekly run surfaces a breaking
+  # nightly before the next pull request trips on it (CLAUDE.md § Toolchain).
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  NEXTEST_PROFILE: ci
+
+# Every action is pinned to a full commit SHA with a version comment; Renovate
+# keeps both current. No job writes to the repository.
+jobs:
+  # The same gate as `make ci` locally: fmt, strict clippy, shellcheck,
+  # nextest, doctests, rustdoc -D warnings. cargo-deny and actionlint have
+  # jobs of their own below, so ci.sh skips them here.
+  linux:
+    name: linux (nightly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The toolchain from rust-toolchain.toml, freshly updated, plus
+      # cargo-nextest (prebuilt) and shellcheck.
+      - run: ./scripts/setup.sh
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: ./scripts/ci.sh
+
+  # The only coverage of macOS code paths, and the platform the cask ships to.
+  macos:
+    name: macos (nightly)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: ./scripts/setup.sh
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: make check
+
+  # Advisories, licences, banned crates and sources (deny.toml).
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --all-features --locked
+
+  # Workflow syntax, expressions and the shell in `run:` blocks.
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Go and shellcheck are preinstalled on the runner; the version matches
+      # ACTIONLINT_VERSION in scripts/setup.sh.
+      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - run: '"$(go env GOPATH)/bin/actionlint"'

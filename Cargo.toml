@@ -1,0 +1,53 @@
+[package]
+name = "rust-template"
+version = "0.1.0"
+edition = "2024"
+description = "A Rust command-line tool"
+license = "MIT"
+repository = "https://github.com/justanotherspy/rust-template"
+readme = "README.md"
+keywords = ["cli"]
+categories = ["command-line-utilities"]
+# Releases ship as GitHub release archives and a Homebrew cask (CLAUDE.md
+# § Release process). Flip this and add a crates.io job to publish there too.
+publish = false
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive", "env"] }
+color-eyre = "0.6.5"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+# Strict lint set (namtao.com/rust, "Rust: Don't Panic"): pedantic + nursery
+# teach good Rust, the rest deny every panic path. clippy.toml relaxes the
+# panic lints inside tests only. Relax a lint with a one-line justification
+# comment above the `#[allow]`, never crate-wide.
+[lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+unreachable = "deny"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+todo = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"
+as_conversions = "deny"
+dbg_macro = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

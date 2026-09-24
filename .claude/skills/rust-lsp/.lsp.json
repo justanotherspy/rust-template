@@ -1,0 +1,21 @@
+{
+  "rust": {
+    "command": "rust-analyzer",
+    "extensionToLanguage": {
+      ".rs": "rust"
+    },
+    "settings": {
+      "rust-analyzer": {
+        "check": {
+          "command": "clippy",
+          "allTargets": true
+        },
+        "cargo": {
+          "allFeatures": true
+        }
+      }
+    },
+    "startupTimeout": 60000,
+    "maxRestarts": 3
+  }
+}

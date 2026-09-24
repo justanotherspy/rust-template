@@ -1,0 +1,18 @@
+[profile.default]
+retries = 0
+slow-timeout = { period = "30s", terminate-after = 2 }
+fail-fast = false
+
+# CI: print a failure's output as it happens and again in the summary.
+[profile.ci]
+failure-output = "immediate-final"
+fail-fast = false
+
+# Tests that share global state (env vars, a cache directory, PATH shims) go
+# in this group by name so nextest runs them one at a time.
+[test-groups]
+serial = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(/serial/)'
+test-group = 'serial'

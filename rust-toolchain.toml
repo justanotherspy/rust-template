@@ -1,0 +1,8 @@
+# Rolling nightly: `make setup` (scripts/setup.sh) installs it with these
+# components and updates it; CI installs a fresh one on every run. When a new
+# nightly breaks the build, pin `channel = "nightly-YYYY-MM-DD"` to the last
+# good date, note it in CLAUDE.md, and unpin once upstream is fixed.
+[toolchain]
+channel = "nightly"
+components = ["rustfmt", "clippy", "rust-analyzer", "rust-src"]
+profile = "minimal"

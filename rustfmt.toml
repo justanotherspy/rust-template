@@ -1,0 +1,9 @@
+# Nightly rustfmt: the unstable options below are why the toolchain is nightly.
+edition = "2024"
+style_edition = "2024"
+max_width = 100
+use_small_heuristics = "Max"
+newline_style = "Unix"
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+format_code_in_doc_comments = true

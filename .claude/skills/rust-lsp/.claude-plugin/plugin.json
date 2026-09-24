@@ -1,0 +1,8 @@
+{
+  "name": "rust-lsp",
+  "description": "Rust code intelligence for Claude Code via rust-analyzer: live diagnostics (clippy) after edits, go-to-definition, find-references, hover and type info.",
+  "version": "0.1.0",
+  "author": {
+    "name": "justanotherspy"
+  }
+}
