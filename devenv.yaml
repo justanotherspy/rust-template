@@ -1,0 +1,10 @@
+# Inputs for devenv.nix. rust-overlay provides the nightly toolchain and
+# follows devenv's nixpkgs so the two agree on a system library set.
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  rust-overlay:
+    url: github:oxalica/rust-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
