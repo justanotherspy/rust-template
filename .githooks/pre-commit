@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Pre-commit hook: formatting and the strict clippy gate on every commit, so
+# a lint never reaches CI. `make hooks` turns it on for this clone
+# (git config core.hooksPath .githooks); `git commit --no-verify` skips it
+# once. The full test suite stays in `make check` and CI: a hook this fast
+# is one people keep enabled.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+cargo fmt --check
+cargo clippy --all-targets --all-features --locked --quiet -- -D warnings
