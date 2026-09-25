@@ -38,7 +38,10 @@ template:
 | `README.md` | install, usage, development, releasing, for a human |
 | `CHANGELOG.md` | user-visible changes per release; a release's section is its tag message and release notes |
 | `CONTRIBUTING.md`, `SECURITY.md` | contributor workflow; vulnerability reporting and hardening |
+| `docs/rust-practices.md` | why each tool, lint, crate and pattern is here, citing the namtao.com write-ups it follows |
 | `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml`, `.config/nextest.toml`, `deny.toml` | toolchain, formatting, lint, test runner and supply-chain policy |
+| `bacon.toml`, `.githooks/pre-commit`, `devenv.nix`, `devenv.yaml` | the inner loop: watch jobs (`make watch`), the opt-in commit hook (`make hooks`), the optional Nix environment |
+| `benches/` | criterion benchmarks (`make bench`) |
 | `scripts/setup.sh` | installs the prerequisites on any host (`make setup`) |
 | `scripts/ci.sh` | the local CI gate (`make ci`) |
 | `scripts/changelog-section.sh`, `scripts/render-cask.sh`, `.github/homebrew/cask.rb.tmpl`, `.github/workflows/release.yml` | the release pipeline (§ Release process) |
@@ -71,7 +74,8 @@ template:
 - **Rolling nightly** via `rust-toolchain.toml` (with `rustfmt`, `clippy`,
   `rust-analyzer`, `rust-src`). `make setup` installs it and updates it to
   the latest nightly, plus `cargo-nextest` and `shellcheck`;
-  `make setup-all` adds `cargo-deny` and `actionlint`.
+  `make setup-all` adds `cargo-deny`, `actionlint`, `cargo-shear`, `bacon`
+  and `watchexec`.
 - Nightly is what lets `rustfmt.toml` use `imports_granularity` and
   `group_imports`, and what clippy's newest `nursery` lints need. The code
   itself uses no `#![feature]`; keep it that way unless the user agrees, so
@@ -90,16 +94,18 @@ template:
 ## Commands
 
 ```
-make setup      # nightly toolchain + cargo-nextest + shellcheck (setup-all: + cargo-deny, actionlint)
+make setup      # nightly toolchain + cargo-nextest + shellcheck (setup-all: + cargo-deny, actionlint, cargo-shear, bacon, watchexec)
 make check      # fmt --check + clippy -D warnings + nextest + doctests
-make ci         # scripts/ci.sh: check + shellcheck + rustdoc -D warnings + cargo-deny + actionlint
-make lint | fmt | test | doc | deny | build | release | run ARGS=… | install | clean
+make ci         # scripts/ci.sh: check + shellcheck + rustdoc -D warnings + cargo-deny + cargo-shear + actionlint
+make lint | fmt | test | doc | deny | shear | bench | outdated | build | release | run ARGS=… | install | clean
+make watch      # bacon: strict clippy on every save (humans; not for agents, it never exits)
+make hooks      # opt in to .githooks/pre-commit (fmt --check + clippy)
 ```
 
 CI (`.github/workflows/ci.yml`) runs `scripts/ci.sh` on Linux, `make check`
-on macOS, cargo-deny and actionlint as their own jobs, on every pull request,
-push to `main`, and weekly. `zizmor.yml` audits the workflows and
-`secret-scan.yml` runs TruffleHog. **Every action is pinned to a full commit
+on macOS, cargo-deny, cargo-shear and actionlint as their own jobs, on every
+pull request, push to `main`, and weekly. `zizmor.yml` audits the workflows
+and `secret-scan.yml` runs TruffleHog. **Every action is pinned to a full commit
 SHA** with a `# vX.Y.Z` comment (Renovate bumps both); never a floating tag
 or branch. A checkout that does not push sets `persist-credentials: false`.
 
@@ -128,7 +134,17 @@ unwrap/expect/panic/indexing in unit tests only.
   `#[cfg(test)]`, so they carry a crate-level `#![allow(…)]` with that
   comment.
 - Prefer combinators and data-in/data-out functions; keep I/O at the edge
-  (`main.rs`, `cli.rs`) and logic in pure modules.
+  (`main.rs`, `cli.rs`) and logic in pure modules. Iterator pipelines over
+  index loops: they satisfy `indexing_slicing` by construction and become
+  parallel with rayon's `.par_iter()`.
+- Parse, don't validate: clap turns arguments into typed values in
+  `cli.rs`; the logic below never re-checks strings.
+- When a value has states with different valid operations, encode the
+  state in the type (typestate: a `PhantomData<S>` parameter, one `impl`
+  per state, transitions consume `self`) instead of checking at run time.
+- Bounds inline when short; a `where` clause when there are several or
+  they name associated types.
+- Rationale and sources for all of the above: `docs/rust-practices.md`.
 - Shell scripts pass `shellcheck` and stay portable across GNU and BSD
   userlands (the macOS runner has no GNU sed/awk extensions, and no
   `sha256sum`: use `shasum -a 256`).
@@ -155,7 +171,15 @@ adding any new dependency.
 | serde + serde_json / toml | JSON / TOML, when needed |
 | jiff | date and time, when needed (not chrono) |
 | rayon | data parallelism, when needed (not tokio for CPU work) |
+| itertools | iterator adaptors beyond std, when needed |
+| thiserror | typed errors in a public library API, when needed (applications stay on color-eyre) |
+| criterion (dev) | benchmarks in `benches/`, each a `[[bench]]` with `harness = false` |
 | tempfile (dev) | temporary directories in tests |
+
+`docs/rust-practices.md` lists the go-to crates for other kinds of project
+(reqwest, sqlx, utoipa, command-run, leptos, dioxus); they are still new
+dependencies, so ask first. `cargo-shear` (CI) fails on a declared
+dependency no code uses.
 
 `cargo deny check` enforces licences (`deny.toml`'s allow-list), RustSec
 advisories and crates.io as the only source. A new licence goes on the list
