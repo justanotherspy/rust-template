@@ -18,7 +18,7 @@ color-eyre = "0.6.5"
 
 [dev-dependencies]
 # Statistics-driven benchmarks behind `cargo bench` (benches/, `make bench`).
-criterion = { version = "0.8.2", features = ["html_reports"] }
+criterion = { version = "=0.8.2", features = ["html_reports"] }
 
 # criterion brings its own `main`, so the libtest harness is off.
 [[bench]]
