@@ -5,7 +5,9 @@
 #                             rust-toolchain.toml (updated to the latest
 #                             nightly, with its components), cargo-nextest
 #                             and the shell linter
-#   scripts/setup.sh --all    + cargo-deny (make deny) and actionlint
+#   scripts/setup.sh --all    + cargo-deny (make deny), actionlint,
+#                             cargo-shear (make shear), bacon (make watch)
+#                             and watchexec (make watch-run)
 #
 # In CI (CI=true) tools are fetched prebuilt instead of compiled.
 # Idempotent: re-running only updates what is out of date.
@@ -16,7 +18,7 @@ want_all=0
 for arg in "$@"; do
   case "$arg" in
     --all) want_all=1 ;;
-    -h | --help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "setup: unknown flag $arg" >&2; exit 2 ;;
   esac
 done
@@ -63,6 +65,16 @@ cargo_tool() {
   fi
 }
 
+# Installs crate <crate> unless its binary <bin> is already on PATH.
+cargo_tool_once() {
+  if have "$2"; then
+    log "$1 present: $("$2" --version 2>&1 | head -n 1)"
+  else
+    log "$1"
+    cargo_tool "$1"
+  fi
+}
+
 # --- rustup -----------------------------------------------------------------
 if ! have rustup; then
   log "installing rustup"
@@ -104,14 +116,12 @@ else
   pkg_install shellcheck || echo "setup: shellcheck not installed; ci.sh will skip that step." >&2
 fi
 
-# --- optional: cargo-deny, actionlint ----------------------------------------
+# --- optional: cargo-deny, cargo-shear, bacon, watchexec, actionlint --------
 if [ "$want_all" = 1 ]; then
-  if have cargo-deny; then
-    log "cargo-deny present: $(cargo deny --version)"
-  else
-    log "cargo-deny"
-    cargo_tool cargo-deny
-  fi
+  cargo_tool_once cargo-deny cargo-deny
+  cargo_tool_once cargo-shear cargo-shear
+  cargo_tool_once bacon bacon
+  cargo_tool_once watchexec-cli watchexec
   if have actionlint; then
     log "actionlint present: $(actionlint --version | head -n 1)"
   else

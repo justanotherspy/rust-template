@@ -26,3 +26,10 @@ target
 # Coverage and profiling output
 *.profraw
 lcov.info
+
+# devenv (devenv.nix): the local state directory, generated hook config and
+# per-user overrides
+.devenv*
+devenv.local.nix
+.pre-commit-config.yaml
+.direnv

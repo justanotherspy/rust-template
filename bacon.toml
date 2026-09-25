@@ -1,0 +1,52 @@
+# bacon: a background checker that re-runs a job on every save and shows
+# only what matters (`make watch`, or `bacon <job>`). The jobs mirror the
+# Makefile gates, so a green bacon screen means a green `make check`.
+# Keys: c clippy, t nextest, d doc, r run, b bench; `?` lists them all.
+# Reference: https://dystroy.org/bacon/config/
+
+default_job = "clippy"
+
+# The strict lint set from Cargo.toml, over every target, warnings as errors:
+# the same command as `make lint` and CI.
+[jobs.clippy]
+command = ["cargo", "clippy", "--all-targets", "--all-features", "--color", "always", "--", "-D", "warnings"]
+need_stdout = false
+
+[jobs.nextest]
+command = [
+  "cargo", "nextest", "run", "--all-features", "--color", "always",
+  "--hide-progress-bar", "--failure-output", "final",
+]
+need_stdout = true
+analyzer = "nextest"
+
+[jobs.doctest]
+command = ["cargo", "test", "--doc", "--all-features", "--color", "always"]
+need_stdout = true
+
+[jobs.doc]
+command = ["cargo", "doc", "--no-deps", "--all-features", "--color", "always"]
+env.RUSTDOCFLAGS = "-D warnings"
+need_stdout = false
+
+# Runs the binary after each successful build; pass arguments after `--`:
+# `bacon run -- greet Ferris`.
+[jobs.run]
+command = ["cargo", "run", "--color", "always"]
+need_stdout = true
+allow_warnings = true
+background = true
+on_change_strategy = "kill_then_restart"
+
+[jobs.bench]
+command = ["cargo", "bench", "--bench", "*", "--color", "always"]
+need_stdout = true
+allow_warnings = true
+watch = ["benches"]
+
+[keybindings]
+c = "job:clippy"
+t = "job:nextest"
+d = "job:doc"
+r = "job:run"
+b = "job:bench"

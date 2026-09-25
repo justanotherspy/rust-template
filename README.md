@@ -14,11 +14,13 @@ command-line tools, set up the way the other `justanotherspy` tools
 
 | Area | What you get |
 | --- | --- |
-| Toolchain | Rolling **nightly** via `rust-toolchain.toml` (rustfmt, clippy, rust-analyzer, rust-src), edition 2024, installed and updated by `make setup` |
+| Practices | The lints, tools and crates from [namtao.com/rust][namtao-rust] and [My 2026 Rust Toolkit][namtao-toolkit], each explained and cited in [`docs/rust-practices.md`](docs/rust-practices.md), which generated repositories keep |
+| Toolchain | Rolling **nightly** via `rust-toolchain.toml` (rustfmt, clippy, rust-analyzer, rust-src), edition 2024, installed and updated by `make setup`; an optional `devenv.nix` |
 | Code | A clap + color-eyre CLI skeleton (`src/cli.rs`), a pure example module (`src/greet.rs`), unit, doc and end-to-end tests |
 | Lints | clippy `pedantic` + `nursery` denied, every panic path denied outside tests, `unsafe` forbidden, nightly-only rustfmt options |
-| Tests | cargo-nextest (`.config/nextest.toml`), doctests, rustdoc `-D warnings` |
-| Supply chain | cargo-deny (`deny.toml`), Renovate from the shared [`justanotherspy/renovate`][renovate] preset, SHA-pinned actions, zizmor, TruffleHog |
+| Tests | cargo-nextest (`.config/nextest.toml`), doctests, rustdoc `-D warnings`, criterion benchmarks (`benches/`) |
+| Inner loop | bacon (`make watch`), watchexec (`make watch-run`), an opt-in fmt + clippy pre-commit hook (`make hooks`) |
+| Supply chain | cargo-deny (`deny.toml`), cargo-shear (unused dependencies), Renovate from the shared [`justanotherspy/renovate`][renovate] preset, SHA-pinned actions, zizmor, TruffleHog |
 | CI | Linux + macOS on a fresh nightly for every PR and push, plus a weekly run to catch a breaking nightly |
 | Release | A signed `vX.Y.Z` tag builds four targets, publishes a GitHub release from `CHANGELOG.md`, and, after your approval, pushes a Homebrew cask to [`justanotherspy/homebrew-tap`][tap] |
 | Claude Code | `CLAUDE.md`, the [`justanotherspy/claude-plugins`][plugins] marketplace with `shuck` enabled, a rust-analyzer LSP plugin, and a SessionStart hook that installs the toolchain in web sessions |
@@ -52,7 +54,7 @@ repository. Set these up once:
 
 - **Branch ruleset on `main`**: require a pull request, signed commits, and
   the CI checks (`linux (nightly)`, `macos (nightly)`, `cargo-deny`,
-  `actionlint`) to pass.
+  `cargo-shear`, `actionlint`) to pass.
 - **Tag ruleset on `v*`**: only you may create tags, signatures required.
 - **`release` environment** with yourself as required reviewer, deployment
   branches/tags limited to `v*` tags, and *allow administrators to bypass*
@@ -73,6 +75,8 @@ repository. Set these up once:
 [renovate]: https://github.com/justanotherspy/renovate
 [tap]: https://github.com/justanotherspy/homebrew-tap
 [plugins]: https://github.com/justanotherspy/claude-plugins
+[namtao-rust]: https://www.namtao.com/rust/
+[namtao-toolkit]: https://www.namtao.com/rust-toolkit-2026/
 <!-- TEMPLATE:END -->
 
 ## Install
@@ -113,15 +117,27 @@ rust-template --help
 ## Development
 
 ```sh
-make setup   # rustup + the nightly from rust-toolchain.toml + cargo-nextest + shellcheck
-make check   # fmt --check, strict clippy, nextest, doctests
-make ci      # everything CI runs, including rustdoc, cargo-deny and actionlint
-make help    # every target
+make setup     # rustup + the nightly from rust-toolchain.toml + cargo-nextest + shellcheck
+make check     # fmt --check, strict clippy, nextest, doctests
+make ci        # everything CI runs, including rustdoc, cargo-deny, cargo-shear and actionlint
+make watch     # bacon: strict clippy on every save (t: tests, r: run)
+make watch-run # watchexec: clippy, tests, then run, on every save
+make bench     # criterion benchmarks; HTML report in target/criterion/
+make outdated  # dependencies with newer versions
+make hooks     # fmt --check + clippy before every commit
+make help      # every target
 ```
 
-`make setup-all` also installs `cargo-deny` and `actionlint`. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and [CLAUDE.md](CLAUDE.md)
-for the full conventions.
+`make setup-all` also installs `cargo-deny`, `actionlint`, `cargo-shear`,
+`bacon` and `watchexec`. With [devenv](https://devenv.sh), `devenv shell`
+provides all of them instead.
+
+[docs/rust-practices.md](docs/rust-practices.md) explains why each lint,
+tool and crate is here, citing the write-ups this project follows
+([namtao.com/rust](https://www.namtao.com/rust/) and
+[My 2026 Rust Toolkit](https://www.namtao.com/rust-toolkit-2026/)). See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and
+[CLAUDE.md](CLAUDE.md) for the full conventions.
 
 ## Releasing
 

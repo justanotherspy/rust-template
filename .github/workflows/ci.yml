@@ -26,8 +26,8 @@ env:
 # keeps both current. No job writes to the repository.
 jobs:
   # The same gate as `make ci` locally: fmt, strict clippy, shellcheck,
-  # nextest, doctests, rustdoc -D warnings. cargo-deny and actionlint have
-  # jobs of their own below, so ci.sh skips them here.
+  # nextest, doctests, rustdoc -D warnings. cargo-deny, cargo-shear and
+  # actionlint have jobs of their own below, so ci.sh skips them here.
   linux:
     name: linux (nightly)
     runs-on: ubuntu-latest
@@ -65,6 +65,20 @@ jobs:
         with:
           command: check
           arguments: --all-features --locked
+
+  # Dependencies declared in Cargo.toml that no code uses: each one costs
+  # compile time and supply-chain surface for nothing.
+  shear:
+    name: cargo-shear
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-shear
+      - run: cargo shear
 
   # Workflow syntax, expressions and the shell in `run:` blocks.
   actionlint:
