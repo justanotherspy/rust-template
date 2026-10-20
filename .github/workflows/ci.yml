@@ -38,7 +38,7 @@ jobs:
       # The toolchain from rust-toolchain.toml, freshly updated, plus
       # cargo-nextest (prebuilt) and shellcheck.
       - run: ./scripts/setup.sh
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: ./scripts/ci.sh
 
   # The only coverage of macOS code paths, and the platform the cask ships to.
@@ -50,7 +50,7 @@ jobs:
         with:
           persist-credentials: false
       - run: ./scripts/setup.sh
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: make check
 
   # Advisories, licences, banned crates and sources (deny.toml).
